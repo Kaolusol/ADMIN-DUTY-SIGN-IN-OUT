@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scoreboard เวลาปฏิบัติหน้าที่ | สถานีดับเพลิง BIT Cities</title>
+
+    <!-- Firebase v10.12.2 (Compatibility versions for simplicity) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script>
+        // === Firebase Configuration (ใช้จากที่คุณให้มา) ===
+        // NOTE: ในสภาพแวดล้อมจริงบน Canvas จะมีการกำหนดค่า Firebase แยกต่างหาก
+        const firebaseConfig = {
+          apiKey: "AIzaSyA_Zvo1O9gazY3lc8oU1Zg4Q-GPwCQenYM",
+          authDomain: "duty-sign-inout.firebaseapp.com",
+          projectId: "duty-sign-inout",
+          storageBucket: "duty-sign-inout.firebasestorage.app",
+          messagingSenderId: "1091884542325",
+          appId: "1:1091884542325:web:62cd115b5c9e63fa844b3c",
+          databaseURL: "https://duty-sign-inout-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        // เริ่มต้น Firebase App
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database(app);
+        
+        // กำหนด Path หลักใน Firebase
+        const LOG_PATH = 'duty_logs';
+        const STATUS_PATH = 'duty_status';
+
+        // รายชื่อผู้ได้รับอนุญาตให้เข้าดู Scoreboard (ต้องเป็นตัวพิมพ์เล็กทั้งหมด)
+        // นี่คือส่วนที่มีการอัปเดตตามที่คุณส่งมา
+        const ALLOWED_VIEWERS = [
+            'ฟิว', 'อิน', 'อินซัง', 'กุศล', 'ก้าว', 'ก้าวกุศล', 'คิว', 'แจ๊ค', 'มัส', 'โน่', 'จีโน่', 'แอ๊ด', 'โทชิเนะ', 'มิน', 'แอ๊ดมิน', 
+            'few', 'in', 'insang', 'kusol', 'kao', 'kaokusol', 'Q', 'que', 'jack', 'mas', 'mast', 'no', 'jino', 'admin', 'toshine',
+            'มันตะ', 'manta', 'ปอนด์', 'pond', 'ปอน', 'pon', 'ปังปอน', 'ปังปอนด์', 'reon', 'รีออน'
+        ];
+    </script>
+
+    <style>
+        body { 
+            font-family: 'Inter', Arial, sans-serif; 
+            background-color: #f4f4f4; 
+            color: #333; 
+            padding: 20px; 
+            text-align: center; 
+        }
+        .container { 
+            background-color: #ffffff; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); 
+            max-width: 90%;
+            width: 800px; 
+            margin: 0 auto; 
+            transition: all 0.3s ease;
+        }
+
+        /* Responsive adjustments for mobile */
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+                max-width: 95%;
+            }
+            h1 { font-size: 1.5em; }
+            h2 { font-size: 1em; }
+            th, td { padding: 8px 4px; font-size: 0.8em; }
+        }
+
+        h1 { color: #cc0000; margin-bottom: 5px; font-weight: 700; }
+        h2 { color: #555; margin-top: 0; font-weight: 400; font-size: 1.2em; margin-bottom: 30px; }
+        
+        /* --- Login Styles --- */
+        #loginScreen { padding: 50px 0; }
+        #loginScreen input[type="text"] { 
+            padding: 12px; 
+            font-size: 1.1em; 
+            border: 2px solid #ccc; 
+            border-radius: 8px; 
+            margin-bottom: 15px; 
+            width: 80%; 
+            max-width: 300px; 
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        #loginScreen input[type="text"]:focus {
+            border-color: #cc0000;
+            outline: none;
+        }
+        #loginScreen button { 
+            padding: 10px 25px; 
+            background-color: #cc0000; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 1.1em; 
+            font-weight: bold;
+            transition: background-color 0.3s, transform 0.1s; 
+            box-shadow: 0 4px 6px rgba(204, 0, 0, 0.3);
+        }
+        #loginScreen button:hover { background-color: #990000; }
+        #loginScreen button:active { transform: scale(0.98); }
+        .error-message { color: #dc3545; margin-top: 10px; font-weight: bold; }
+        
+        /* --- Scoreboard Styles --- */
+        #scoreboardContent { display: none; }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px; 
+            border-radius: 8px;
+            overflow: hidden; /* For rounded corners on the table */
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px 8px; 
+            text-align: center; 
+            word-break: break-word; /* Ensure text wraps */
+        }
+        th { 
+            background-color: #cc0000; 
+            color: white; 
+            font-weight: 600; 
+            text-transform: uppercase;
+        }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #fff3f3; transition: background-color 0.2s; }
+        .rank-gold, .rank-silver, .rank-bronze { 
+            font-weight: bold; 
+            color: #333; 
+            padding: 4px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+        .rank-gold { background-color: #FFD700; }
+        .rank-silver { background-color: #C0C0C0; }
+        .rank-bronze { background-color: #CD7F32; }
+        
+        .time-high { color: #008000; font-weight: bold; } /* Green for highest time */
+        .time-low { color: #dc3545; } /* Red for lowest time */
+        .message { 
+            margin-top: 20px; 
+            font-style: italic; 
+            color: #666; 
+            font-size: 0.9em;
+        }
+        .on-duty {
+            color: #cc0000;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+        .off-duty {
+            color: #6c757d;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body onload="document.getElementById('loginScreen').style.display='block';">
+    <div class="container">
+        <h1>Scoreboard เวลาปฏิบัติหน้าที่</h1>
+        <h2>สถานีดับเพลิงและกู้ภัย BIT Cities</h2>
+        
+        <div id="loginScreen" style="display: none;"> 
+            <p>กรุณาป้อนชื่อผู้ใช้งานเพื่อเข้าดู Scoreboard:</p>
+            <input type="text" id="viewerName" placeholder="ป้อนชื่อของคุณ">
+            <button id="loginButton" onclick="attemptLogin()">เข้าสู่ระบบ</button>
+            <div id="loginError" class="error-message"></div>
+        </div>
+
+        <div id="scoreboardContent">
+            <div class="message" id="statusMessage">กำลังโหลดและคำนวณข้อมูล...</div>
+
+            <table id="scoreboardTable">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">อันดับ</th>
+                        <th style="width: 15%;">รหัสเจ้าหน้าที่</th>
+                        <th style="width: 20%;">หน่วยล่าสุด</th>
+                        <th>เวลาปฏิบัติหน้าที่รวม</th>
+                        <th>สถานะปัจจุบัน</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+            
+            <div class="message">
+                ข้อมูลนี้ดึงและอัปเดตแบบ Real-time จาก Firebase Database
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // --- LOGIN FUNCTIONS ---
+        function attemptLogin() {
+            const nameInput = document.getElementById('viewerName').value.toLowerCase().trim();
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.textContent = '';
+
+            // ตรวจสอบชื่อผู้ใช้กับรายชื่อที่อนุญาต (แปลงเป็นตัวพิมพ์เล็กทั้งหมด)
+            const lowerCaseAllowedViewers = ALLOWED_VIEWERS.map(n => n.toLowerCase());
+            
+            if (lowerCaseAllowedViewers.includes(nameInput)) {
+                showScoreboard();
+            } else {
+                errorDiv.textContent = 'ชื่อผู้ใช้งานไม่ถูกต้อง! โปรดตรวจสอบรายชื่อที่ได้รับอนุญาต';
+            }
+        }
+
+        function showScoreboard() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('scoreboardContent').style.display = 'block';
+            
+            // เริ่มฟังการเปลี่ยนแปลงของข้อมูล Log และ Status ทันทีที่ล็อกอินสำเร็จ
+            listenForRealtimeData(); 
+            // เริ่มการอัปเดตตารางทุก 10 วินาที (เพื่ออัปเดตเวลาที่กำลังเข้าเวร)
+            setInterval(updateScoreboardDisplay, 10000); 
+        }
+
+        // --- เพิ่ม Event Listener เมื่อ DOM โหลดเสร็จ ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const viewerNameInput = document.getElementById('viewerName');
+            
+            // ฟังเหตุการณ์ 'keyup' ในช่องกรอกชื่อเพื่อรองรับการกด Enter
+            if (viewerNameInput) {
+                viewerNameInput.addEventListener('keyup', function(event) {
+                    if (event.key === 'Enter' || event.keyCode === 13) {
+                        event.preventDefault(); 
+                        attemptLogin(); 
+                    }
+                });
+            }
+        });
+
+
+        // --- SCOREBOARD CALCULATION & DISPLAY ---
+        let dutyLogsData = {}; 
+        let dutyStatusData = {}; 
+
+        /**
+         * แปลง milliseconds เป็นรูปแบบเวลาที่อ่านง่าย (ชม., นาที, วินาที)
+         * @param {number} milliseconds - ระยะเวลาในหน่วยมิลลิวินาที
+         * @returns {string} รูปแบบเวลาที่อ่านง่าย
+         */
+        function formatDuration(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            
+            let result = [];
+            if (hours > 0) {
+                result.push(`${hours} ชม.`);
+            }
+            if (minutes > 0) {
+                result.push(`${minutes} นาที`);
+            }
+            // แสดงวินาทีถ้าไม่มี ชม. และ นาที หรือถ้าเวลาทั้งหมดน้อยกว่า 1 นาที
+            if (totalSeconds < 60 || result.length === 0) {
+                 result.push(`${seconds} วินาที`);
+            }
+            
+            return result.join(' ');
+        }
+
+        /**
+         * คำนวณเวลารวมในการปฏิบัติหน้าที่ของแต่ละ ID จาก Log และสถานะปัจจุบัน
+         * @returns {Object<string, {totalTime: number, lastUnit: string}>} ผลรวมเวลาและหน่วยล่าสุดต่อ ID
+         */
+        function calculateDutyTimes() {
+            const logs = dutyLogsData;
+            const status = dutyStatusData;
+            const totalDutyTime = {}; 
+            const activeDutySessions = {}; 
+            
+            // 1. จัดเรียง Log ตามเวลา (เก่าไปใหม่) เพื่อให้คำนวณถูกต้อง
+            const sortedKeys = Object.keys(logs).sort((a, b) => logs[a].timestamp - logs[b].timestamp);
+
+            // 2. คำนวณเวลาที่จบสมบูรณ์และหาช่วงที่ยัง Active
+            sortedKeys.forEach(key => {
+                const log = logs[key];
+                const id = log.id;
+                const timestamp = log.timestamp;
+                
+                if (!totalDutyTime[id]) {
+                    totalDutyTime[id] = { totalTime: 0, lastUnit: log.unit || '-' };
+                } else {
+                    // อัปเดตหน่วยล่าสุดจาก Log ล่าสุด
+                    totalDutyTime[id].lastUnit = log.unit || totalDutyTime[id].lastUnit; 
+                }
+
+                if (log.action === 'SIGN_IN') {
+                    // บันทึกเวลาเริ่มต้นเซสชัน
+                    activeDutySessions[id] = timestamp;
+                } else if (log.action === 'SIGN_OUT') {
+                    if (activeDutySessions[id]) {
+                        // คำนวณระยะเวลาของเซสชันที่จบแล้ว
+                        const duration = timestamp - activeDutySessions[id];
+                        totalDutyTime[id].totalTime += duration;
+                        // ลบเซสชันที่จบแล้วออก
+                        delete activeDutySessions[id];
+                    }
+                }
+            });
+
+            // 3. จัดการกับรอบการทำงานที่ยังไม่จบ (On Duty)
+            const currentTime = Date.now();
+            for (const id in status) {
+                if (status[id].onDuty && status[id].startTime) {
+                    const startTime = status[id].startTime;
+                    const duration = currentTime - startTime;
+
+                    if (!totalDutyTime[id]) {
+                        // หากไม่มี Log เลย แต่สถานะเป็น On Duty
+                        totalDutyTime[id] = { totalTime: 0, lastUnit: status[id].unit || '-' };
+                    }
+                    
+                    // บวกเวลาปฏิบัติหน้าที่ปัจจุบันเข้าไป (ถ้ามีรอบที่ยังไม่จบ)
+                    if (duration > 0) {
+                       totalDutyTime[id].totalTime += duration; 
+                    }
+                    
+                    // อัปเดตหน่วยล่าสุดจาก Status (ซึ่งควรเป็นข้อมูลล่าสุด)
+                    totalDutyTime[id].lastUnit = status[id].unit || totalDutyTime[id].lastUnit;
+                }
+            }
+
+            return totalDutyTime;
+        }
+
+        /**
+         * แสดงผลข้อมูล Scoreboard ลงในตาราง HTML
+         */
+        function updateScoreboardDisplay() {
+            const totalDutyTime = calculateDutyTimes();
+            const status = dutyStatusData;
+            const tbody = document.getElementById('scoreboardTable').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = ''; 
+
+            const sortedData = Object.keys(totalDutyTime).map(id => ({
+                id,
+                time: totalDutyTime[id].totalTime,
+                unit: totalDutyTime[id].lastUnit,
+                onDuty: status[id]?.onDuty || false
+            }));
+
+            // เรียงลำดับจากเวลามากไปน้อย
+            sortedData.sort((a, b) => b.time - a.time); 
+
+            let maxTime = sortedData.length > 0 ? sortedData[0].time : 0;
+            let minTime = sortedData.length > 0 ? sortedData[sortedData.length - 1].time : 0;
+            
+            sortedData.forEach((data, index) => {
+                const row = tbody.insertRow();
+                
+                // จัดอันดับ (Rank)
+                let rankClass = (index === 0 ? 'rank-gold' : index === 1 ? 'rank-silver' : index === 2 ? 'rank-bronze' : '');
+                
+                // สไตล์สีเวลา
+                let timeClass = (data.time === maxTime && maxTime > 0) ? 'time-high' : (data.time === minTime && minTime > 0) ? 'time-low' : '';
+                
+                // 1. อันดับ
+                row.insertCell().textContent = index + 1;
+                row.cells[0].className = rankClass;
+                
+                // 2. รหัสเจ้าหน้าที่
+                row.insertCell().textContent = data.id;
+                
+                // 3. หน่วยล่าสุด
+                row.insertCell().textContent = data.unit || '-';
+                
+                // 4. เวลาปฏิบัติหน้าที่รวม
+                const timeCell = row.insertCell();
+                timeCell.textContent = formatDuration(data.time);
+                timeCell.className = timeClass;
+                
+                // 5. สถานะปัจจุบัน
+                const statusCell = row.insertCell();
+                statusCell.textContent = data.onDuty ? '🔴 ปฏิบัติหน้าที่' : '⚪ ว่างเวร';
+                statusCell.className = data.onDuty ? 'on-duty' : 'off-duty'; 
+            });
+
+            document.getElementById('statusMessage').innerHTML = `อัปเดตล่าสุด: ${new Date().toLocaleTimeString('th-TH')}`;
+        }
+
+        // --- REALTIME LISTENER ---
+        function listenForRealtimeData() {
+            // 1. ฟัง Log Data (เมื่อมีการเข้า/ออกเวร)
+            database.ref(LOG_PATH).on('value', (snapshot) => {
+                dutyLogsData = snapshot.val() || {};
+                console.log('Log data received:', Object.keys(dutyLogsData).length, 'entries');
+                updateScoreboardDisplay(); // คำนวณและแสดงผลใหม่ทันที
+            }, (error) => {
+                console.error("Error reading duty logs:", error);
+                document.getElementById('statusMessage').textContent = `เกิดข้อผิดพลาดในการดึง Log: ${error.message}`;
+            });
+
+            // 2. ฟัง Status Data (สถานะ On Duty)
+            database.ref(STATUS_PATH).on('value', (snapshot) => {
+                dutyStatusData = snapshot.val() || {};
+                console.log('Status data received:', Object.keys(dutyStatusData).length, 'entries');
+                updateScoreboardDisplay(); 
+            }, (error) => {
+                console.error("Error reading duty status:", error);
+                // ไม่ต้องเปลี่ยนข้อความสถานะหลัก เพราะ Log อาจจะยังทำงานอยู่
+            });
+        }
+    </script>
+</body>
+</html>

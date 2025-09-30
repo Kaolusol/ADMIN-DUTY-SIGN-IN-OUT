@@ -27,6 +27,9 @@
         const LOG_PATH = 'duty_logs';
         const STATUS_PATH = 'duty_status';
 
+        // REINTRODUCED: รหัสผ่านสำหรับล้างข้อมูลเวลาปฏิบัติหน้าที่ (ตามคำขอ)
+        const RESET_PASSWORD = '124356';
+        
         // รายชื่อผู้ได้รับอนุญาตให้เข้าดู Scoreboard (ต้องเป็นตัวพิมพ์เล็กทั้งหมด)
         const ALLOWED_VIEWERS = [
             'ฟิว', 'อิน', 'อินซัง', 'กุศล', 'ก้าว', 'ก้าวกุศล', 'คิว', 'แจ๊ค', 'มัส', 'โน่', 'จีโน่', 'แอ๊ด', 'โทชิเนะ', 'มิน', 'แอ๊ดมิน', 
@@ -61,6 +64,78 @@
         .time-high { color: #28a745; font-weight: bold; }
         .time-low { color: #dc3545; }
         .message { margin-top: 20px; font-style: italic; color: #666; }
+
+        /* New Reset Button Style */
+        .reset-button {
+            padding: 12px 25px;
+            background-color: #dc3545; /* Red for danger action */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .reset-button:hover {
+            background-color: #c82333;
+        }
+        .reset-button:active {
+            transform: scale(0.98);
+        }
+
+        /* === Modal Styles === */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+            width: 90%;
+            max-width: 350px;
+            text-align: left;
+        }
+        .modal-header {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #cc0000;
+        }
+        .modal-body {
+            margin-bottom: 25px;
+            font-size: 1em;
+            color: #444;
+        }
+        .modal-footer {
+            text-align: right;
+        }
+        .modal-button {
+            padding: 10px 15px;
+            background-color: #cc0000;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .modal-button:hover {
+            background-color: #990000;
+        }
     </style>
 </head>
 <body onload="document.getElementById('loginScreen').style.display='block';">
@@ -91,14 +166,59 @@
                 <tbody>
                     </tbody>
             </table>
+
+            <!-- Button to call the password prompt modal -->
+            <div style="margin-top: 30px;">
+                <button class="reset-button" onclick="showPasswordPromptForReset()">ล้างข้อมูลเวลาปฏิบัติหน้าที่ทั้งหมด (Admin)</button>
+            </div>
             
             <div class="message">
                 ข้อมูลนี้ดึงและอัปเดตแบบ Real-time จาก Firebase Database
             </div>
         </div>
     </div>
+
+    <!-- Message Modal (Generic - For success/error display) -->
+    <div id="customModal" class="modal">
+        <div class="modal-content">
+            <div id="modalHeader" class="modal-header">Message</div>
+            <div id="modalBody" class="modal-body">Content</div>
+            <div class="modal-footer">
+                <button onclick="document.getElementById('customModal').style.display = 'none';" class="modal-button">
+                    ตกลง
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- REVERTED: Password Prompt Modal for Time Reset (No default placeholder for password) -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">ยืนยันการล้างข้อมูลเวลาปฏิบัติหน้าที่ (Admin)</div>
+            <div class="modal-body">
+                <p style="color: #dc3545; font-weight: bold; margin-bottom: 15px;">⚠️ คำเตือน: การกระทำนี้จะลบบันทึกการเข้า-ออกเวรทั้งหมด</p>
+                <p style="margin-bottom: 15px;">กรุณาป้อนรหัสผ่านผู้ดูแลระบบเพื่อยืนยัน:</p>
+                <!-- UPDATED: Type is 'password' and placeholder is generic -->
+                <input type="password" id="resetPasswordInput" placeholder="ป้อนรหัสผ่าน" class="modal-input" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 0;">
+                <p id="passwordError" class="error-message" style="text-align: center; margin-top: 10px;"></p>
+            </div>
+            <div class="modal-footer">
+                <button onclick="document.getElementById('resetPasswordModal').style.display = 'none'; document.getElementById('resetPasswordInput').value = ''; document.getElementById('passwordError').textContent = '';" class="modal-button" style="background-color: #6c757d;">ยกเลิก</button>
+                <button onclick="handleTimeReset()" class="modal-button" style="background-color: #dc3545;">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+    <!-- END REVERTED MODAL -->
     
     <script>
+        // Custom Modal Function (replaces alert())
+        function showMessage(title, message) {
+            document.getElementById('modalHeader').textContent = title;
+            document.getElementById('modalBody').textContent = message;
+            const modal = document.getElementById('customModal');
+            modal.style.display = 'flex';
+        }
+
         // --- LOGIN FUNCTIONS ---
         function attemptLogin() {
             const nameInput = document.getElementById('viewerName').value.toLowerCase().trim();
@@ -141,7 +261,68 @@
             }
         });
 
+        // --- Time Reset Functions (Reintroduced Password Check) ---
+        
+        // ฟังก์ชันแสดง Modal ป้อนรหัสผ่านเพื่อล้างข้อมูล
+        function showPasswordPromptForReset() {
+            // เคลียร์ค่าและข้อความผิดพลาดเก่าก่อนแสดง Modal
+            document.getElementById('resetPasswordInput').value = '';
+            document.getElementById('passwordError').textContent = '';
+            document.getElementById('resetPasswordModal').style.display = 'flex';
+        }
 
+        // ฟังก์ชันจัดการการล้างข้อมูลเมื่อได้รับการยืนยัน (มีการตรวจสอบรหัสผ่าน)
+        async function handleTimeReset() {
+            const passwordInput = document.getElementById('resetPasswordInput').value;
+            const errorElement = document.getElementById('passwordError');
+            errorElement.textContent = ''; // เคลียร์ข้อความผิดพลาด
+
+            // 1. ตรวจสอบรหัสผ่าน
+            if (passwordInput !== RESET_PASSWORD) {
+                errorElement.textContent = 'รหัสผ่านไม่ถูกต้อง! โปรดลองอีกครั้ง';
+                return; // หยุดการทำงานถ้าใส่รหัสผิด
+            }
+            
+            // รหัสผ่านถูกต้อง ปิด Modal และดำเนินการต่อ
+            document.getElementById('resetPasswordModal').style.display = 'none'; 
+
+            // ดำเนินการล้างข้อมูล
+            try {
+                // 1. ลบบันทึกการเข้า-ออกเวรทั้งหมด (Duty Logs) โดยการ set เป็น object ว่าง
+                await database.ref(LOG_PATH).set({});
+                console.log("Duty logs cleared successfully.");
+
+                // 2. รีเซ็ตสถานะ On Duty ของทุกคนใน STATUS_PATH
+                const statusSnapshot = await database.ref(STATUS_PATH).once('value');
+                const currentStatus = statusSnapshot.val();
+
+                if (currentStatus) {
+                    const updates = {};
+                    for (const id in currentStatus) {
+                        // เก็บ ID และ Unit เดิมไว้ แต่ล้างสถานะปฏิบัติหน้าที่
+                        updates[id] = {
+                            id: id,
+                            unit: currentStatus[id].unit, // เก็บหน่วยล่าสุดไว้
+                            onDuty: false, // สถานะถูกรีเซ็ต
+                            lastAction: 'RESET', // บันทึกการกระทำว่าถูกรีเซ็ต
+                            lastTimestamp: Date.now(),
+                            onDutyUnit: null // ล้างหน่วยที่ใช้ขึ้นเวร
+                        };
+                    }
+                    // อัปเดตสถานะทั้งหมด
+                    await database.ref(STATUS_PATH).set(updates);
+                    console.log("Duty statuses reset successfully.");
+                }
+
+                // 3. แสดงข้อความสำเร็จ
+                showMessage("ดำเนินการสำเร็จ", "ข้อมูลเวลาปฏิบัติหน้าที่ทั้งหมดถูกล้างและรีเซ็ตสถานะเรียบร้อยแล้ว!");
+
+            } catch (error) {
+                console.error("Error during time reset:", error);
+                showMessage("ข้อผิดพลาดร้ายแรง", `ไม่สามารถล้างข้อมูลได้: ${error.message}`);
+            }
+        }
+        
         // --- SCOREBOARD CALCULATION & DISPLAY ---
         let dutyLogsData = {}; 
         let dutyStatusData = {}; 
@@ -184,10 +365,13 @@
 
                 if (log.action === 'SIGN_IN') {
                     activeDutySessions[id] = timestamp;
-                } else if (log.action === 'SIGN_OUT') {
+                } else if (log.action === 'SIGN_OUT' || log.action === 'RESET') {
                     if (activeDutySessions[id]) {
                         const duration = timestamp - activeDutySessions[id];
-                        totalDutyTime[id].totalTime += duration;
+                        // นับเวลาเฉพาะ SIGN_OUT เท่านั้น RESET ไม่ต้องนับเพิ่ม
+                        if (log.action === 'SIGN_OUT') {
+                             totalDutyTime[id].totalTime += duration;
+                        }
                         delete activeDutySessions[id];
                     }
                 }
@@ -268,4 +452,3 @@
     </script>
 </body>
 </html>
-
